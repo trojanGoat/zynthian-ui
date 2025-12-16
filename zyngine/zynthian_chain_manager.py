@@ -86,6 +86,11 @@ class zynthian_chain_manager:
     # Subsignals are defined inside each module. Here we define chain_manager subsignals:
     SS_SET_ACTIVE_CHAIN = 1
     SS_MOVE_CHAIN = 2
+    SS_ADD_CHAIN = 3
+    SS_REMOVE_CHAIN = 4
+    SS_REMOVE_ALL_CHAINS = 5
+    SS_ADD_PROCESSOR = 6
+    SS_REMOVE_PROCESSOR = 7
 
     engine_info = None
     single_processor_engines = ["BF", "MD", "PT", "AE", "SL", "IR"]
@@ -262,6 +267,8 @@ class zynthian_chain_manager:
         # logging.debug(f"midi_chan_2_chain_ids = {self.midi_chan_2_chain_ids}")
 
         self.active_chain_id = chain_id
+        if fast_refresh:
+            zynsigman.send_queued(zynsigman.S_CHAIN_MAN, self.SS_ADD_CHAIN)
         self.state_manager.end_busy("add_chain")
         return chain_id
 
@@ -330,10 +337,8 @@ class zynthian_chain_manager:
             chain = self.chains[chain_id]
             if isinstance(chain.midi_chan, int):
                 if chain.midi_chan < MAX_NUM_MIDI_CHANS:
-                    self.midi_chan_2_chain_ids[chain.midi_chan].remove(
-                        chain_id)
-                    lib_zyncore.ui_send_ccontrol_change(
-                        chain.midi_chan, 120, 0)
+                    self.midi_chan_2_chain_ids[chain.midi_chan].remove(chain_id)
+                    lib_zyncore.ui_send_ccontrol_change(chain.midi_chan, 120, 0)
                 elif chain.midi_chan == 0xffff:
                     for mc in range(16):
                         self.midi_chan_2_chain_ids[mc].remove(chain_id)
@@ -341,8 +346,7 @@ class zynthian_chain_manager:
 
             if chain.mixer_chan is not None:
                 mute = self.state_manager.zynmixer.get_mute(chain.mixer_chan)
-                self.state_manager.zynmixer.set_mute(
-                    chain.mixer_chan, True, True)
+                self.state_manager.zynmixer.set_mute(chain.mixer_chan, True, True)
 
             for processor in chain.get_processors():
                 self.remove_processor(chain_id, processor, False, False)
@@ -359,8 +363,7 @@ class zynthian_chain_manager:
                 if chain_id in self.ordered_chain_ids:
                     self.ordered_chain_ids.remove(chain_id)
             elif chain.mixer_chan is not None:
-                self.state_manager.zynmixer.set_mute(
-                    chain.mixer_chan, mute, True)
+                self.state_manager.zynmixer.set_mute(chain.mixer_chan, mute, True)
 
         zynautoconnect.request_audio_connect(fast_refresh)
         zynautoconnect.request_midi_connect(fast_refresh)
@@ -371,6 +374,8 @@ class zynthian_chain_manager:
                 chain_pos -= 1
             self.set_active_chain_by_index(chain_pos)
         self.state_manager.purge_zs3()
+        if fast_refresh:
+            zynsigman.send_queued(zynsigman.S_CHAIN_MAN, self.SS_REMOVE_CHAIN)
         self.state_manager.end_busy("remove_chain")
         return True
 
@@ -384,8 +389,8 @@ class zynthian_chain_manager:
 
         success = True
         for chain in list(self.chains.keys()):
-            success &= self.remove_chain(
-                chain, stop_engines, fast_refresh=False)
+            success &= self.remove_chain(chain, stop_engines, fast_refresh=False)
+        zynsigman.send_queued(zynsigman.S_CHAIN_MAN, self.SS_REMOVE_ALL_CHAINS)
         return success
 
     def move_chain(self, offset, chain_id=None):
@@ -786,9 +791,12 @@ class zynthian_chain_manager:
         if proc_id is None:
             # TODO: Derive next available processor id from self.processors
             proc_id = self.get_available_processor_id()
+            send_signal = True
         elif proc_id in self.processors:
             logging.error(f"Processor '{proc_id}' already exist!")
             return None
+        else:
+            send_signal = False
 
         if self.state_manager.is_busy():
             self.state_manager.start_busy("add_processor", None, f"adding {eng_code} to chain {chain_id}")
@@ -820,6 +828,9 @@ class zynthian_chain_manager:
                         src_chain.rebuild_graph()
                 zynautoconnect.request_audio_connect(fast_refresh)
                 zynautoconnect.request_midi_connect(fast_refresh)
+                # Signal processor creation, except when creating from state (loading snapshot)
+                if send_signal:
+                    zynsigman.send_queued(zynsigman.S_CHAIN_MAN, self.SS_ADD_PROCESSOR)
                 # Success!! => Return processor
                 self.state_manager.end_busy("add_processor")
                 return processor
@@ -858,7 +869,7 @@ class zynthian_chain_manager:
         chain : Chain id
         processor : Instance of processor
         stop_engine : True to stop unused engine
-        autoroute : True to trigger immediate autoconnect (Default: No autoconnect)
+        autoroute : True to trigger immediate autoconnect (Default: Autoconnect)
         Returns : True on success
         """
 
@@ -900,6 +911,7 @@ class zynthian_chain_manager:
                     chain.rebuild_graph()
                 zynautoconnect.request_audio_connect()
                 zynautoconnect.request_midi_connect()
+                zynsigman.send_queued(zynsigman.S_CHAIN_MAN, self.SS_REMOVE_PROCESSOR)
 
         self.state_manager.end_busy("remove_processor")
         return success

@@ -112,7 +112,10 @@ class zynthian_wsleds_z2(zynthian_wsleds_base):
             else:
                 self.wsleds[10] = self.wscolor_active2
         else:
-            self.wsleds[10] = self.wscolor_default
+            if self.zyngui.alt_mode:
+                self.wsleds[10] = self.wscolor_alt
+            else:
+                self.wsleds[10] = self.wscolor_default
 
         # ZS3/Snapshot screen:
         if curscreen == "zs3":

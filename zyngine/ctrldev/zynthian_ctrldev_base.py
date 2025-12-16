@@ -205,17 +205,13 @@ class zynthian_ctrldev_zynpad(zynthian_ctrldev_base):
     def init(self):
         super().init()
         # Register for zynseq updates
-        zynsigman.register_queued(
-            zynsigman.S_STEPSEQ, self.zynseq.SS_SEQ_PLAY_STATE, self.update_seq_state)
-        zynsigman.register_queued(
-            zynsigman.S_STEPSEQ, self.zynseq.SS_SEQ_REFRESH, self.refresh)
+        zynsigman.register_queued(zynsigman.S_STEPSEQ, self.zynseq.SS_SEQ_PLAY_STATE, self.update_seq_state)
+        zynsigman.register_queued(zynsigman.S_STEPSEQ, self.zynseq.SS_SEQ_REFRESH, self.refresh)
 
     def end(self):
         # Unregister from zynseq updates
-        zynsigman.unregister(
-            zynsigman.S_STEPSEQ, self.zynseq.SS_SEQ_PLAY_STATE, self.update_seq_state)
-        zynsigman.unregister(zynsigman.S_STEPSEQ,
-                             self.zynseq.SS_SEQ_REFRESH, self.refresh)
+        zynsigman.unregister(zynsigman.S_STEPSEQ, self.zynseq.SS_SEQ_PLAY_STATE, self.update_seq_state)
+        zynsigman.unregister(zynsigman.S_STEPSEQ,self.zynseq.SS_SEQ_REFRESH, self.refresh)
         self.light_off()
         super().end()
 
